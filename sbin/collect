@@ -1,0 +1,297 @@
+#! /usr/bin/env bash
+#
+# The estorm command script.
+#
+# TODO: Narrow the amount of duplicated code.
+#
+# Environment Variables:
+#
+#   JAVA_HOME        The java implementation to use.  Overrides JAVA_HOME.
+#
+#   COLLECT_CLASSPATH  Extra Java CLASSPATH entries.
+#
+#   COLLECT_HEAPSIZE   The maximum amount of heap to use, in MB.
+#                    Default is 1000.
+#
+#   COLLECT_CONF_DIR   Alternate conf dir. Default is ${COLLECT_HOME}/conf.
+#
+#   COLLECT_ROOT_LOGGER The root appender. Default is INFO,console
+#
+#
+echo $0
+BIN=`dirname "$0"`
+BIN=`cd "$BIN">/dev/null; pwd`
+bin=`dirname "${BASH_SOURCE-$0}"`
+bin=`cd "$bin">/dev/null; pwd`
+
+if [ "$COLLECT_IDENT_STRING" = "" ]; then
+  export COLLECT_IDENT_STRING="$USER"
+fi
+# This will set COLLECT_HOME, etc.
+. "$BIN"/collect-config.sh
+. "$BIN"/collect-common.sh
+
+cygwin=false
+case "`uname`" in
+CYGWIN*) cygwin=true;;
+esac
+
+# Detect if we are in hbase sources dir
+in_dev_env=false
+if [ -d "${COLLECT_HOME}/target" ]; then
+  in_dev_env=true
+fi
+
+# if no args specified, show usage
+if [ $# = 0 ]; then
+  echo "Usage: collect [<options>] <command> [<args>]"
+  echo "Options:"
+  echo "  --config DIR    Configuration direction to use. Default: ./config"
+  echo "  --hosts HOSTS   Override the list in 'regionservers' file"
+  echo ""
+  echo "Commands:"
+  echo "Some commands take arguments. Pass no args or -h for usage."
+  echo "  master          Run an Kafka node"
+  echo "  clean           Run the Kafka clean up script"
+  echo "  classpath       Dump hbase CLASSPATH"
+  echo "  version         Print the version"
+  echo "  CLASSNAME       Run the class named CLASSNAME"
+  exit 1
+fi
+
+
+
+# get arguments
+COMMAND=$1
+shift
+
+JAVA=$JAVA_HOME/bin/java
+echo COLLECT_HOME=$COLLECT_HOME
+# override default settings for this command, if applicable
+if [ -f "$COLLECT_HOME/conf/collect-env.sh" ]; then
+  . "$COLLECT_HOME/conf/collect-env.sh"
+  echo load "$COLLECT_HOME/conf/collect-env.sh"
+elif [ -f "$COLLECT_HOME/sbin/collect-env.sh" ]; then
+  . "$COLLECT_HOME/sbin/collect-env.sh"
+fi
+
+echo DEBUG=$DEBUG
+
+
+# so that filenames w/ spaces are handled correctly in loops below
+ORIG_IFS=$IFS
+IFS=
+
+# CLASSPATH initially contains $COLLECT_CONF_DIR
+CLASSPATH="${COLLECT_CONF_DIR}"
+CLASSPATH=${CLASSPATH}:$JAVA_HOME/lib/tools.jar
+
+add_to_cp_if_exists() {
+  if [ -d "$@" ]; then
+    CLASSPATH=${CLASSPATH}:"$@"
+  fi
+}
+
+# For releases, add hbase & webapps to CLASSPATH
+# Webapps must come first else it messes up Jetty
+if [ -d "$COLLECT_HOME/collect-webapps" ]; then
+  add_to_cp_if_exists "${COLLECT_HOME}"
+fi
+
+add_maven_deps_to_classpath() {
+  f="${COLLECT_HOME}/target/cached_classpath.txt"
+  if [ ! -f "${f}" ]
+  then
+      echo "As this is a development environment, we need ${f} to be generated from maven (command: mvn install -DskipTests)"
+      exit 1
+  fi
+  CLASSPATH=${CLASSPATH}:`cat "${f}"`
+}
+
+
+#Add the development env class path stuff
+if $in_dev_env; then
+  add_maven_deps_to_classpath
+fi
+
+ 
+#add the COLLECT jars for each module
+for f in $COLLECT_HOME/collect*.jar ; do
+	if [[ $f = *sources.jar ]]
+  then
+    : # Skip sources.jar
+  elif [ -f $f ]
+  then
+    CLASSPATH=${CLASSPATH}:$f;
+  fi
+done
+ 
+# Add libs to CLASSPATH
+for f in $COLLECT_HOME/lib/*; do
+  if [[ $f = *.jar ]]
+  then
+    CLASSPATH=${CLASSPATH}:$f;
+  elif [ -d $f ]
+  then
+  for sf in $f/*.jar; do
+      CLASSPATH=${CLASSPATH}:$sf;
+  done
+  fi
+done
+  
+CLASSPATH=${CLASSPATH}:$COLLECT_CLASSPATH
+
+# default log directory & file
+if [ "$COLLECT_LOG_DIR" = "" ]; then
+  COLLECT_LOG_DIR="$COLLECT_HOME/logs"
+fi
+ 
+# cygwin path translation
+if $cygwin; then
+  CLASSPATH=`cygpath -p -w "$CLASSPATH"`
+  COLLECT_HOME=`cygpath -d "$COLLECT_HOME"`
+  COLLECT_LOG_DIR=`cygpath -d "$COLLECT_LOG_DIR"`
+fi
+
+function append_path() {
+  if [ -z "$1" ]; then
+    echo $2
+  else
+    echo $1:$2
+  fi
+}
+
+
+# cygwin path translation
+if $cygwin; then
+  JAVA_LIBRARY_PATH=`cygpath -p "$JAVA_LIBRARY_PATH"`
+fi
+
+# restore ordinary behaviour
+unset IFS
+
+#Set the right GC options based on the what we are running
+declare -a server_cmds=("master")
+for cmd in ${server_cmds[@]}; do
+	if [[ $cmd == $COMMAND ]]; then
+		server=true
+		break
+	fi
+done
+
+ 
+start_server(){
+	STCOMMAND=$1
+	shift
+	if [ "$STCOMMAND" == "start" ] ; then
+		hostName=`hostname`
+		#hostName="wxdb04"
+		#read host from config
+	 	hostList=`cat $COLLECT_CONF_DIR/servers`
+		hostId=0
+		for host in $hostList ; do
+			((hostId++))
+			if [ "$host" == "$hostName" ] ;then 			
+				break;
+			fi
+		done
+		  
+		echo hostList=$hostList hostName=$hostName hostId=$hostId
+		
+#####mod collect.properties 
+		oldId=`cat $COLLECT_CONF_DIR/collect.properties | grep collect.id=`
+		sed -i "s/$oldId/collect\.id=$hostId/g" $COLLECT_CONF_DIR/collect.properties
+		#echo $oldId
+		
+		oldId=`cat $COLLECT_CONF_DIR/collect.properties | grep host.name=`
+		for hostnn in $oldId ; do
+			if [ "${hostnn:0:4}" == "host" ] ;then 			
+				sed -i "s/$hostnn/host\.name=$hostName/g" $COLLECT_CONF_DIR/collect.properties
+				#echo oldHost=$hostnn
+				#echo newHost `cat $COLLECT_CONF_DIR/collect.properties | grep host.name=`
+			fi
+		done
+		oldId=`cat $COLLECT_CONF_DIR/collect.properties | grep host.name=`
+		for hostnn in $oldId ; do
+			if [ "${hostnn:0:4}" == "host" ] ;then 			
+ 				echo $hostnn `cat $COLLECT_CONF_DIR/collect.properties | grep collect.id=`
+ 			fi
+		done
+		
+		####COLLECT_DATA_DIR
+		if [ "X$COLLECT_DATA_DIR" != "X" ] ; then
+			oldId=`cat $COLLECT_CONF_DIR/collect.properties | grep collect.cache.dir=`
+			echo =================oldId=$oldId======================
+			oldId=${oldId//\//\\\/}
+			TMP_COLLECT_LOG_DIR=${COLLECT_DATA_DIR//\//\\\/}
+			sed -i "s/$oldId/collect\.cache\.dir=$TMP_COLLECT_LOG_DIR/g" $COLLECT_CONF_DIR/collect.properties
+		fi
+		echo `cat $COLLECT_CONF_DIR/collect.properties | grep collect.cache.dir=`
+		
+#####mod log4j
+		oldId=`cat $COLLECT_CONF_DIR/log4j.properties | grep collect.logs.dir=`
+		#echo oldId=$oldId
+		oldId=${oldId//\//\\\/}
+		TMP_COLLECT_LOG_DIR=${COLLECT_LOG_DIR//\//\\\/}
+		#echo TMP_COLLECT_LOG_DIR=$TMP_COLLECT_LOG_DIR
+		sed -i "s/$oldId/collect\.logs\.dir=$TMP_COLLECT_LOG_DIR/g" $COLLECT_CONF_DIR/log4j.properties
+		
+		export CLASSPATH=$CLASSPATH
+#		exec  java -Xmx512m com.ery.ertc.collect.CollectMain -start "$@"
+		CLASS=com.ery.ertc.collect.CollectMain  
+		if [ "${COLLECT_NOEXEC}" != "" ]; then
+		  "$JAVA" -Dproc_$COMMAND $DEBUG -XX:OnOutOfMemoryError="kill -9 %p" $JAVA_HEAP_MAX $COLLECT_OPTS $CLASS -start "$@"
+		else
+		  exec "$JAVA" -Dproc_$COMMAND  $DEBUG -XX:OnOutOfMemoryError="kill -9 %p" $JAVA_HEAP_MAX $COLLECT_OPTS $CLASS -start "$@"
+		fi
+		
+	elif [ "$STCOMMAND" == "stop" ] ; then
+		
+		pid=$COLLECT_PID_DIR/collect-$COLLECT_IDENT_STRING-$COMMAND.pid
+		echo $pid
+		
+	 	PID=`ps ax | grep -i 'CollectMain' | grep java | grep -v grep | awk '{print $1}' `
+	 	if [ -f "$pid" ] ; then
+	 		PID=`cat $pid`
+	 	fi
+	 	echo stoping collect pid $PID
+	 	export CLASSPATH=$CLASSPATH
+	 	oldId=`cat $COLLECT_CONF_DIR/collect.properties | grep host.name=`
+	 	oldId=${oldId/host\.name=/}
+	 	oldId=${oldId/\n/}
+	 	echo host.name=$oldId
+		java -Xmx512m com.ery.ertc.collect.CollectMain -stop $oldId
+		sleep 2
+		if kill -0 $pidKilled > /dev/null 2>&1; then
+			kill -2 $PID
+		fi
+ 	 	export COLLECT_STOP_TIMEOUT=120
+	 	echo wait 120s 
+	 	logout=$COLLECT_LOG_DIR/stop-collect-jstack.log
+	 	waitForProcessEnd $PID 'stop-collect-command'
+	 	if [ -f "$COLLECT_PID_DIR/collect-$COLLECT_IDENT_STRING-$COMMAND.pid" ] ; then 
+	 		rm -rf $pid
+	 	fi
+	else
+		echo "usage:collect master start|stop"
+	fi
+}
+
+# figure out which class to run
+if [ "$COMMAND" = "master" ] ; then
+   start_server $@
+   exit 0 ;
+elif [ "$COMMAND" = "classpath" ] ; then
+ 	echo $CLASSPATH
+ 	exit 0;
+else
+  CLASS=$COMMAND
+fi
+
+export CLASSPATH
+
+if [ "${COLLECT_NOEXEC}" != "" ]; then
+  "$JAVA" -Dproc_$COMMAND $DEBUG -XX:OnOutOfMemoryError="kill -9 %p" $JAVA_HEAP_MAX $COLLECT_OPTS $CLASS "$@"
+else
+  exec "$JAVA" -Dproc_$COMMAND  $DEBUG -XX:OnOutOfMemoryError="kill -9 %p" $JAVA_HEAP_MAX $COLLECT_OPTS $CLASS "$@"
+fi
