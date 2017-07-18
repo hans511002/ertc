@@ -15,6 +15,7 @@ import java.util.zip.GZIPOutputStream;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.commons.util.StringUtil;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -37,14 +38,6 @@ import org.apache.tools.tar.TarInputStream;
 
 import com.ery.base.support.log4j.LogUtils;
 
-/**
- * 文件系统工具类
- * 
- * @copyRights @ 2012-2013,Tianyuan DIC Information Co.,Ltd. All rights reserved.
- * @author wanghao
- * @createDate 2013-1-9
- * @version v1.0
- */
 public class HDFSUtils {
 	public static final Log LOG = LogFactory.getLog(HDFSUtils.class);
 	public static final byte[] newLine;
@@ -67,7 +60,7 @@ public class HDFSUtils {
 	 * @return 文件系统
 	 */
 	public static FileSystem getFileSystem(String ip, String port) {
-		int iport = StringUtils.stringToInt(port, -1);
+		int iport = StringUtil.stringToInt(port, -1);
 		if (-1 == iport) {
 			return null;
 		}
@@ -105,7 +98,7 @@ public class HDFSUtils {
 	 * @return 文件系统
 	 */
 	public static String getHDFSAddress(String ip, String ports) {
-		int port = StringUtils.stringToInt(ports, -1);
+		int port = StringUtil.stringToInt(ports, -1);
 		if (null == ip || ip.trim().length() <= 0) {
 			return null;
 		}
@@ -323,7 +316,7 @@ public class HDFSUtils {
 			}
 
 			if (fsystem.isFile(tpath)) {
-				if (StringUtils.matcher(tpath.getName(), pattern) && notContains(lstRootPath, tpath, true)) {
+				if (StringUtil.matcher(tpath.getName(), pattern) && notContains(lstRootPath, tpath, true)) {
 					FileAttributePO fap = new FileAttributePO();
 					fap.setPath(tpath.toUri().getPath());
 					fap.setLastModifyTime(fsystem.getFileStatus(tpath).getModificationTime());
@@ -367,7 +360,7 @@ public class HDFSUtils {
 			if (fileStatus.isDir() && notContains(lstRootPath, fileStatus, false)) {
 				directoryList(fsystem, tempMap, fileStatus.getPath(), srcPath, pattern, lstRootPath);
 			} else {
-				if (StringUtils.matcher(fileStatus.getPath().getName(), pattern) &&
+				if (StringUtil.matcher(fileStatus.getPath().getName(), pattern) &&
 						notContains(lstRootPath, fileStatus, false)) {
 					FileAttributePO fap = new FileAttributePO();
 					fap.setPath(fileStatus.getPath().toUri().getPath());
@@ -553,10 +546,10 @@ public class HDFSUtils {
 			return null;
 		}
 		if (compress == 0) {
-			LogUtils.info("获取OutputStream 普通流  ");
+			LogUtils.info("获取普通流");
 			return ((FileSystem) outSystem).create(new Path(outFilePath));
 		} else if (compress == 1) {
-			LogUtils.info("获取GZ OutputStream压缩流");
+			LogUtils.info("获取GZ压缩流");
 			if (!outFilePath.endsWith(".gz")) {
 				outFilePath += ".gz";
 			}
@@ -585,16 +578,16 @@ public class HDFSUtils {
 		}
 
 		if (compress == 1) {
-			LogUtils.info("获取GZ OutputStream压缩流");
-
+			LogUtils.info("获取GZ压缩流");
 			return new GZIPOutputStream(os);
 		}
-		LogUtils.info("获取OutputStream 普通流");
+
+		LogUtils.info("获取普通流");
 		return os;
 	}
 
 	/**
-	 * 文件压缩标识符 Copyrights @ 2012-2013,Tianyuan DIC Information Co.,Ltd. All rights reserved.
+	 * 文件压缩标识符
 	 * 
 	 * @author wanghao
 	 * @version v1.0
@@ -605,7 +598,7 @@ public class HDFSUtils {
 	}
 
 	/**
-	 * 文件类型 Copyrights @ 2012-2013,Tianyuan DIC Information Co.,Ltd. All rights reserved.
+	 * 文件类型
 	 * 
 	 * @author wanghao
 	 * @version v1.0

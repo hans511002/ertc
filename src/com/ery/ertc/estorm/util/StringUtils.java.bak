@@ -38,6 +38,7 @@ import java.util.regex.Pattern;
 /**
  * String类型的工具类
  * 
+  
  * @createDate 2013-1-14
  * @version v1.0
  */

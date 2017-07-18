@@ -25,8 +25,10 @@ import com.ery.base.support.utils.Utils;
 import com.ery.base.support.utils.hash.HashFunctions;
 
 /**
-  * 
-  * @description 用于去重过滤的缓存Hash（用于大数据实时去重）
+ * Copyrights @ 2013,Tianyuan DIC Information Co.,Ltd. All rights reserved.
+ * 
+ * @author wangcs
+ * @description 用于去重过滤的缓存Hash（用于大数据实时去重）
  * @date 14-5-9　原理： 1，借助内存缓存文件位置索引，从文件读取数据来提高元素定位能力，通过hash提高并发，通过链表提供索引速度
  *       2，内存中维护一个固定大小的hash桶，每个桶分内存和文件缓存两部分，内存中存的是量固定大小的链表数据结构，文件中分块顺序存放。
  *       3，文件搜索，文件头占8字节，存文件元数据信息，后续分块存放数据，每个桶按顺序对应一个块，每个块占用1024b的空间：

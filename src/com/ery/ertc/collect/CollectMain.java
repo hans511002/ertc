@@ -23,18 +23,7 @@ import com.ery.base.support.sys.SystemConstant;
 import com.ery.base.support.sys.SystemVariable;
 import com.ery.base.support.utils.Utils;
 
-/**
- * Copyrights @ 2013,Tianyuan DIC Information Co.,Ltd. All rights reserved.
- * 
- * @description 采集主线程 集群中，运行多个采集程序，单Master模式，Master选取靠抢占，谁抢到算谁。
- *              Master：运行任务（是否可运行任务，可通过配置），分配任务 Worker：运行任务
- * 
- *              后台运行：> /dev/null 2>&1 &
- * 
- * @date 15-7-7 -
- * @modify
- * @modifyDate 15-7-7
- */
+
 public class CollectMain {
 
 	public static CommandLine buildCommandline(String[] args) {
